@@ -39,6 +39,26 @@ def lookup_profile(name):
     return None, 'Menlo 13', 13.0
 
 
+def lookup_render_flags(name):
+    """Return text-rendering flags (anti-aliasing) for the named profile,
+    defaulting to both on if the profile isn't found. A synthetic/unlinked
+    session bookmark (see fleet-build) doesn't inherit these from the real
+    profile automatically — they must be copied in explicitly, the same way
+    Normal Font is, or iTerm falls back to jagged/aliased text."""
+    defaults = {'ascii_aa': True, 'non_ascii_aa': True}
+    try:
+        data = _read_defaults()
+        for bm in data.get('New Bookmarks', []):
+            if bm.get('Name') == name:
+                return {
+                    'ascii_aa': bm.get('ASCII Anti Aliased', True),
+                    'non_ascii_aa': bm.get('Non-ASCII Anti Aliased', True),
+                }
+    except Exception:
+        pass
+    return defaults
+
+
 def set_profile_font(name, size, family=None):
     """Update Normal Font (and Non Ascii Font, if set) for the named profile
     in place, leaving every other preference untouched. Returns the new font
