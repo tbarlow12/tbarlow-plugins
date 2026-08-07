@@ -80,7 +80,7 @@ read -r PROFILE
 PROFILE="${PROFILE:-$DEFAULT_PROFILE}"
 
 # Arrangement output path
-DEFAULT_ARR="$HOME/Library/Application Support/iTerm2/Arrangements/fleet.itermArrangement"
+DEFAULT_ARR="$HOME/Library/Application Support/iTerm2/Arrangements/fleet.iterm2arrangement"
 printf "Arrangement output path [%s]: " "$DEFAULT_ARR"
 read -r ARR_PATH
 ARR_PATH="${ARR_PATH:-$DEFAULT_ARR}"

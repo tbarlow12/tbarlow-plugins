@@ -5,7 +5,7 @@ fleet-build: Generate an iTerm2 arrangement from fleet.yaml.
 Usage: fleet-build [path/to/fleet.yaml]
 
 Reads fleet.yaml, builds a cols×rows tiled arrangement with one pane per
-agent per repo, and writes an .itermArrangement file ready to import.
+agent per repo, and writes an .iterm2arrangement file ready to import.
 
 Each repo gets its own tab. Within each tab, panes are assigned to agent
 directories in row-major order:
@@ -42,7 +42,7 @@ def parse_fleet_yaml(path):
     height = float(get_nested('screen', 'height') or 1056)
     profile = get_nested('iterm2', 'profile') or 'Default'
     arr_path = os.path.expanduser(get_nested('iterm2', 'arrangement_path') or
-                                  '~/Library/Application Support/iTerm2/Arrangements/fleet.itermArrangement')
+                                  '~/Library/Application Support/iTerm2/Arrangements/fleet.iterm2arrangement')
 
     repos = []
     in_repos = False

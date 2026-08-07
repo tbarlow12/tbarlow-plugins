@@ -43,7 +43,7 @@ screen:
   height: 1056
 iterm2:
   profile: Default
-  arrangement_path: ~/Library/Application Support/iTerm2/Arrangements/fleet.itermArrangement
+  arrangement_path: ~/Library/Application Support/iTerm2/Arrangements/fleet.iterm2arrangement
 repos:
   - git@github.com:org/repo-one.git
   - git@github.com:org/repo-two.git
