@@ -29,14 +29,17 @@ def new_guid():
     return str(uuid.uuid4()).upper()
 
 def minimal_session_view(working_dir, profile, frame, badge=None, tab_name=None, tab_color=None,
-                          normal_font='Menlo 13', point_size=13.0, badge_color=None):
+                          normal_font='Menlo 13', point_size=13.0, badge_color=None,
+                          ascii_aa=True, non_ascii_aa=True):
     """Build a SessionView plist dict from scratch (no seed arrangement needed).
 
     Guid is intentionally kept synthetic/unlinked (not the real profile's
     Guid) — linking it makes iTerm treat the session as "launch this saved
     profile fresh," which discards per-session overrides like Working
-    Directory and Tab Color. Only the font string is borrowed from the real
-    profile, as plain data.
+    Directory and Tab Color. Font and anti-aliasing are borrowed from the
+    real profile as plain data instead — an unlinked bookmark that doesn't
+    set these explicitly falls back to a tiny, jagged/aliased default,
+    regardless of what the real profile has configured.
     """
     guid = new_guid()
     # char cell size approximated from the real profile's font point size,
@@ -50,6 +53,8 @@ def minimal_session_view(working_dir, profile, frame, badge=None, tab_name=None,
         'Original Guid': new_guid(),
         'Name': tab_name or profile,
         'Normal Font': normal_font,
+        'ASCII Anti Aliased': ascii_aa,
+        'Non-ASCII Anti Aliased': non_ascii_aa,
         'Columns': max(20, int(frame['width'] / char_w)),
         'Rows': max(6, int(frame['height'] / char_h)),
     }
@@ -159,6 +164,8 @@ def build_tab(repo_name, cfg, color, agent_offset=0):
                 normal_font=cfg['normal_font'],
                 point_size=cfg['point_size'],
                 badge_color=cfg['badge_color_rgb'],
+                ascii_aa=cfg['ascii_aa'],
+                non_ascii_aa=cfg['non_ascii_aa'],
             )
             panes.append(sv)
             y += h + 1
@@ -187,6 +194,9 @@ def main():
     _, font, size = _fleet_iterm.lookup_profile(cfg['profile'])
     cfg['normal_font'] = font
     cfg['point_size'] = size
+    render = _fleet_iterm.lookup_render_flags(cfg['profile'])
+    cfg['ascii_aa'] = render['ascii_aa']
+    cfg['non_ascii_aa'] = render['non_ascii_aa']
 
     badge_spec = cfg.get('badge_color') or 'gray'
     r, g, b = parse_color(badge_spec)
@@ -209,7 +219,7 @@ def main():
 
     window = {
         'Tabs': tabs,
-        'WindowType': 0,
+        'Window Type': 15,  # WINDOW_TYPE_MAXIMIZED — fills the screen, stays a normal window (no separate Space)
     }
 
     out_path = cfg['arrangement_path']
