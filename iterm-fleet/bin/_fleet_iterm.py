@@ -39,24 +39,26 @@ def lookup_profile(name):
     return None, 'Menlo 13', 13.0
 
 
-def lookup_render_flags(name):
-    """Return text-rendering flags (anti-aliasing) for the named profile,
-    defaulting to both on if the profile isn't found. A synthetic/unlinked
-    session bookmark (see fleet-build) doesn't inherit these from the real
-    profile automatically — they must be copied in explicitly, the same way
-    Normal Font is, or iTerm falls back to jagged/aliased text."""
-    defaults = {'ascii_aa': True, 'non_ascii_aa': True}
+def get_profile_dict(name):
+    """Return a full copy of the named iTerm2 profile's ~127 settings —
+    colors, cursor style, bell behavior, scrollback, fonts, transparency,
+    everything — or None if it can't be found.
+
+    fleet-build uses this as the base for each pane's synthetic bookmark, so
+    it inherits everything from the real profile by default. Hand-picking
+    individual settings to copy (font, then anti-aliasing, then scrollback
+    length...) means every setting nobody thought to copy silently falls
+    back to iTerm's from-scratch default for an unlinked bookmark, which is
+    a real recurring bug class, not a one-off — copy the whole profile
+    instead and only override what must differ per-session."""
     try:
         data = _read_defaults()
         for bm in data.get('New Bookmarks', []):
             if bm.get('Name') == name:
-                return {
-                    'ascii_aa': bm.get('ASCII Anti Aliased', True),
-                    'non_ascii_aa': bm.get('Non-ASCII Anti Aliased', True),
-                }
+                return dict(bm)
     except Exception:
         pass
-    return defaults
+    return None
 
 
 def set_profile_font(name, size, family=None):
