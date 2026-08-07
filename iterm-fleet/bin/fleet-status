@@ -1,0 +1,50 @@
+#!/usr/bin/env python3
+"""
+fleet-status: Print the current fleet.yaml config at a glance.
+
+Usage: fleet-status [path/to/fleet.yaml]
+"""
+import sys
+import os
+
+import _fleet_yaml
+import _fleet_iterm
+
+
+def main():
+    config_path = sys.argv[1] if len(sys.argv) > 1 else _fleet_yaml.DEFAULT_PATH
+    try:
+        cfg = _fleet_yaml.load(config_path)
+    except FileNotFoundError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    _, font, size = _fleet_iterm.lookup_profile(cfg['profile'])
+
+    print(f"config:            {cfg['path']}")
+    print(f"base_dir:          {cfg['base_dir']}")
+    print(f"agent_count:       {cfg['agent_count']}")
+    print(f"layout:            {cfg['cols']}x{cfg['rows']} ({int(cfg['width'])}x{int(cfg['height'])}px)")
+    print(f"profile:           {cfg['profile']}  ({font})")
+    print(f"badge_color:       {cfg.get('badge_color') or 'gray (default)'}")
+    if cfg.get('badge_width_fraction') or cfg.get('badge_height_fraction'):
+        print(f"badge_size:        {cfg.get('badge_width_fraction', '?')} x "
+              f"{cfg.get('badge_height_fraction', '?')} (width x height fraction)")
+    print(f"tab_colors:        {', '.join(cfg['tab_colors']) if cfg['tab_colors'] else 'default palette'}")
+    print(f"arrangement_path:  {cfg['arrangement_path']}")
+    built = os.path.exists(cfg['arrangement_path'])
+    print(f"  ({'exists' if built else 'not built yet — run fleet-build'})")
+    print(f"repos ({len(cfg['repos'])}):")
+    for r in cfg['repos']:
+        name = os.path.basename(r.rstrip('/').removesuffix('.git'))
+        missing = []
+        for i in range(1, cfg['agent_count'] + 1):
+            path = os.path.join(cfg['base_dir'], str(i), name)
+            if not os.path.isdir(path):
+                missing.append(str(i))
+        status = 'ok' if not missing else f"missing for agent(s) {','.join(missing)} — run fleet-clone"
+        print(f"  - {name:<25} {status}")
+
+
+if __name__ == '__main__':
+    main()

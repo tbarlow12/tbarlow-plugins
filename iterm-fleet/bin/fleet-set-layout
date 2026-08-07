@@ -1,0 +1,48 @@
+#!/usr/bin/env python3
+"""
+fleet-set-layout: Change the pane grid layout, then rebuild and reopen.
+
+Usage: fleet-set-layout <colsxrows>   (e.g. 3x2, 2x2, 2x3, 4x2)
+"""
+import sys
+import os
+import re
+import subprocess
+
+import _fleet_yaml
+
+
+def main():
+    if len(sys.argv) < 2:
+        print("Usage: fleet-set-layout <colsxrows>  (e.g. 3x2)", file=sys.stderr)
+        sys.exit(1)
+    m = re.match(r'^(\d+)x(\d+)$', sys.argv[1].strip().lower())
+    if not m:
+        print(f"ERROR: '{sys.argv[1]}' isn't a valid layout — use e.g. 3x2", file=sys.stderr)
+        sys.exit(1)
+    cols, rows = int(m.group(1)), int(m.group(2))
+
+    try:
+        cfg = _fleet_yaml.load()
+    except FileNotFoundError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    cfg['cols'], cfg['rows'] = cols, rows
+    _fleet_yaml.save(cfg)
+    print(f"Set layout to {cols}x{rows} ({cols * rows} panes per tab)")
+
+    if cols * rows != cfg['agent_count']:
+        if cols * rows > cfg['agent_count']:
+            detail = "some panes will reference agent directories that don't exist yet"
+        else:
+            detail = f"agents beyond {cols * rows} won't appear in any tab"
+        print(f"NOTE: {cols}x{rows} = {cols * rows} panes per tab, but agent_count is "
+              f"{cfg['agent_count']}. Pane count comes from layout, not agent_count — {detail}.")
+
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    subprocess.run([os.path.join(script_dir, 'fleet-apply')], check=True)
+
+
+if __name__ == '__main__':
+    main()

@@ -7,8 +7,8 @@ description: |
   Use when setting up a new machine, adding repos to an existing fleet, or rebuilding
   the iTerm2 arrangement after a config change.
   Keywords: fleet, iterm2, arrangement, workspace, multi-agent, setup, clone repos, agents
-compatibility: Requires Python 3, git, and iTerm2 installed on macOS.
-allowed-tools: Bash(fleet-init *) Bash(fleet-clone *) Bash(fleet-build *) Bash(fleet-open *) Bash(ls *) Bash(cat *) Read AskUserQuestion
+compatibility: Requires Python 3, git, and iTerm2 installed on macOS. `gh` and `fzf` are optional (enable the repo picker in fleet-init).
+allowed-tools: Bash(fleet-init *) Bash(fleet-clone *) Bash(fleet-build *) Bash(fleet-open *) Bash(fleet-apply *) Bash(fleet-status *) Bash(fleet-add-repo *) Bash(fleet-remove-repo *) Bash(fleet-set-font *) Bash(fleet-set-badge *) Bash(fleet-set-tab-colors *) Bash(fleet-set-layout *) Bash(fleet-set-agent-count *) Bash(fleet-set-arrangement-path *) Bash(ls *) Bash(cat *) Bash(find *) Read AskUserQuestion
 ---
 
 # fleet
@@ -19,17 +19,23 @@ arrangement is generated with one tab per repo, one pane per agent.
 
 ## Locate plugin bin directory
 
+The plugin's installed location varies (marketplace cache path, dev checkout,
+etc.) — don't hardcode a guess. Find it once per session:
+
 ```bash
-PLUGIN_BIN="$HOME/.rootstock/plugins/iterm-fleet/bin"
+find ~/.claude/plugins -maxdepth 6 -type d -path '*iterm-fleet/*/bin' 2>/dev/null
 ```
 
-Confirm the scripts are present:
-
 ```bash
+PLUGIN_BIN="<the path that command found>"
 ls "$PLUGIN_BIN"
 ```
 
-Expected: `fleet-init`, `fleet-clone`, `fleet-build`, `fleet-open`.
+Expected: `fleet-init`, `fleet-clone`, `fleet-build`, `fleet-open`, `fleet-apply`,
+`fleet-status`, `fleet-add-repo`, `fleet-remove-repo`, `fleet-set-font`,
+`fleet-set-badge`, `fleet-set-tab-colors`, `fleet-set-layout`,
+`fleet-set-agent-count`, `fleet-set-arrangement-path`, plus internal `_fleet_*.py`
+helper modules (not directly invoked).
 
 ## Step 1: Check for existing config
 
@@ -48,6 +54,12 @@ ls ~/.config/iterm-fleet/fleet.yaml 2>/dev/null && echo "exists" || echo "missin
 
 This is interactive — let the user answer the prompts. Do not pre-fill answers.
 When it finishes, confirm the written config looks correct before continuing.
+
+The repo-selection prompt tries `gh` first (if installed and authenticated):
+it lists every repo the user has access to, sorted by most recently updated,
+and lets them multi-select via `fzf` (real checkbox UI) if installed, or a
+paginated numbered menu otherwise. It falls back to manual URL paste if `gh`
+isn't set up or nothing gets picked — that's expected, not an error.
 
 ## Step 3: Clone repos
 
@@ -80,11 +92,24 @@ This imports the arrangement into iTerm2. If iTerm2 is not running it will be
 launched first. Tell the user to use **Window → Restore Arrangement → fleet**
 if the window doesn't appear automatically.
 
-## Rebuilding after config changes
+## Iterating on a running fleet
 
-If the user only changed the fleet.yaml (added a repo, changed agent count):
-- Re-run Steps 3 and 4 only (clone + build). No need to re-run fleet-init.
-- Re-run Step 5 to load the new arrangement.
+Once a fleet exists, prefer the dedicated tool over hand-editing fleet.yaml
+or re-running fleet-init — each one updates the config and (except where
+noted) rebuilds + reopens automatically:
+
+- `fleet-status` — show current config before making a change
+- `fleet-add-repo <url>` — then run `fleet-clone` and `fleet-apply` (does NOT auto-apply: new agent dirs need cloning first)
+- `fleet-remove-repo <name>` — auto-applies
+- `fleet-set-font <size> [family]` — auto-applies. Changes the *iTerm2 profile itself* (global, not scoped to fleet panes)
+- `fleet-set-tab-colors <color...>` — auto-applies. Named colors: `red blue green amber orange teal purple olive gray cyan pink yellow white`, or `'r,g,b'` floats
+- `fleet-set-badge <color> [width-frac] [height-frac]` — auto-applies. The fraction args are a *global* iTerm2 preference (`BadgeMaxWidthFraction`/`BadgeMaxHeightFraction`), not per-arrangement — mention this to the user before changing it
+- `fleet-set-layout <colsxrows>` — auto-applies. Pane count comes from cols×rows, not agent_count — warns if they don't match
+- `fleet-set-agent-count <n>` — then run `fleet-clone` and `fleet-apply` (does NOT auto-apply, same reason as add-repo)
+- `fleet-set-arrangement-path <path>` — auto-applies. Warns if the path doesn't end in `.iterm2arrangement` (see Edge cases below for why that extension matters)
+
+If the user just changed fleet.yaml by hand (rare — the tools above are
+preferred), `fleet-apply` alone is equivalent to fleet-build + fleet-open.
 
 ## Edge cases
 
@@ -97,3 +122,14 @@ If the user only changed the fleet.yaml (added a repo, changed agent count):
   from iterm2.com.
 - **Arrangement already open in iTerm2**: iTerm2 may warn about replacing the current
   arrangement — tell the user to confirm the replacement.
+- **Arrangement file extension**: must be `.iterm2arrangement` (what iTerm2's
+  `Info.plist` actually registers), not `.itermArrangement` — the latter has no
+  app association and silently fails to open. `fleet-set-arrangement-path` warns
+  if you set the wrong one.
+- **Font renders tiny**: panes need a real, matching iTerm2 profile font linked
+  in (via `Normal Font` in the arrangement's Bookmark) — an unlinked bookmark
+  with no font set falls back to a tiny default, independent of Columns/Rows.
+  Don't try to fix this by pointing the Bookmark's `Guid` at the real profile's
+  own Guid — that makes iTerm treat the session as "launch this saved profile
+  fresh," discarding the per-session Working Directory and Tab Color overrides.
+  Use `fleet-set-font` rather than hand-editing this.
