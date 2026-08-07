@@ -65,7 +65,7 @@ should be reported and the user asked how to proceed before continuing.
 "$PLUGIN_BIN/fleet-build"
 ```
 
-Generates the `.itermArrangement` file. If it fails, read the error carefully:
+Generates the `.iterm2arrangement` file. If it fails, read the error carefully:
 - **fleet.yaml not found** → re-run Step 2
 - **Permission denied** → check output directory permissions
 - **Other** → show the full error to the user

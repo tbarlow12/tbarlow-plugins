@@ -15,7 +15,7 @@ import sys, re, os
 
 config = open(sys.argv[1]).read()
 m = re.search(r'arrangement_path:\s*"?([^"\n]+)"?', config)
-path = m.group(1).strip() if m else os.path.expanduser('~/Library/Application Support/iTerm2/Arrangements/fleet.itermArrangement')
+path = m.group(1).strip() if m else os.path.expanduser('~/Library/Application Support/iTerm2/Arrangements/fleet.iterm2arrangement')
 print(os.path.expanduser(path))
 EOF
 )
