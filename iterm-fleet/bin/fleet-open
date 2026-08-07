@@ -14,7 +14,7 @@ ARR_PATH=$(python3 - "$CONFIG" <<'EOF'
 import sys, re, os
 
 config = open(sys.argv[1]).read()
-m = re.search(r'arrangement_path:\s*["\']?([^"\'\n]+)["\']?', config)
+m = re.search(r'arrangement_path:\s*"?([^"\n]+)"?', config)
 path = m.group(1).strip() if m else os.path.expanduser('~/Library/Application Support/iTerm2/Arrangements/fleet.itermArrangement')
 print(os.path.expanduser(path))
 EOF
@@ -26,9 +26,9 @@ if [ ! -f "$ARR_PATH" ]; then
 fi
 
 if ! pgrep -x iTerm2 >/dev/null 2>&1; then
-  open -a iTerm2
+  open -b com.googlecode.iterm2
   sleep 1
 fi
 
-open -a iTerm2 "$ARR_PATH"
+open -b com.googlecode.iterm2 "$ARR_PATH"
 echo "Opened arrangement in iTerm2."
