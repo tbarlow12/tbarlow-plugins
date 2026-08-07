@@ -1,0 +1,16 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "tbarlow-plugins",
+  "description": "Personal Claude Code plugins by Tanner Barlow",
+  "owner": {
+    "name": "Tanner Barlow"
+  },
+  "plugins": [
+    {
+      "name": "iterm-fleet",
+      "description": "Scaffold multi-agent iTerm2 workspaces — clone repos into numbered agent directories and generate a tiled arrangement so each pane runs an independent agent instance.",
+      "source": "./iterm-fleet",
+      "category": "development"
+    }
+  ]
+}
