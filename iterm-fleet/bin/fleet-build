@@ -32,7 +32,7 @@ def parse_fleet_yaml(path):
 
     def get_nested(parent, child):
         m = re.search(rf'^{parent}:\s*\n(?:.*\n)*?\s+{child}:\s*(.+)$', text, re.MULTILINE)
-        return m.group(1).strip() if m else None
+        return m.group(1).strip().strip('"').strip("'") if m else None
 
     base_dir = os.path.expanduser(get('base_dir') or '~/repos')
     agent_count = int(get('agent_count') or 6)
