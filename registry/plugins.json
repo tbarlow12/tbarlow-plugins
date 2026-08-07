@@ -1,0 +1,18 @@
+{
+  "version": "1",
+  "updated": "2026-08-07",
+  "plugins": [
+    {
+      "name": "iterm-fleet",
+      "description": "Scaffold multi-agent iTerm2 workspaces — clone repos into numbered agent directories and generate a tiled arrangement so each pane runs an independent agent instance.",
+      "repo": "tbarlow12/tbarlow-plugins",
+      "path": "iterm-fleet",
+      "version": "0.1.0",
+      "category": "development",
+      "tags": ["iterm2", "agents", "workspace", "multi-agent", "arrangement", "fleet", "scaffolding"],
+      "install": {
+        "claude": "tbarlow12/tbarlow-plugins/iterm-fleet"
+      }
+    }
+  ]
+}

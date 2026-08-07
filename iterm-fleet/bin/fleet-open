@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# Open the generated arrangement in iTerm2.
+# Usage: fleet-open [path/to/fleet.yaml]
+set -euo pipefail
+
+CONFIG="${1:-$HOME/.config/iterm-fleet/fleet.yaml}"
+
+if [ ! -f "$CONFIG" ]; then
+  echo "ERROR: fleet.yaml not found at $CONFIG — run fleet-init first" >&2
+  exit 1
+fi
+
+ARR_PATH=$(python3 - "$CONFIG" <<'EOF'
+import sys, re, os
+
+config = open(sys.argv[1]).read()
+m = re.search(r'arrangement_path:\s*["\']?([^"\'\n]+)["\']?', config)
+path = m.group(1).strip() if m else os.path.expanduser('~/Library/Application Support/iTerm2/Arrangements/fleet.itermArrangement')
+print(os.path.expanduser(path))
+EOF
+)
+
+if [ ! -f "$ARR_PATH" ]; then
+  echo "ERROR: arrangement not found at $ARR_PATH — run fleet-build first" >&2
+  exit 1
+fi
+
+if ! pgrep -x iTerm2 >/dev/null 2>&1; then
+  open -a iTerm2
+  sleep 1
+fi
+
+open -a iTerm2 "$ARR_PATH"
+echo "Opened arrangement in iTerm2."

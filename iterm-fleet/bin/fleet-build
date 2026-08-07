@@ -1,0 +1,260 @@
+#!/usr/bin/env python3
+"""
+fleet-build: Generate an iTerm2 arrangement from fleet.yaml.
+
+Usage: fleet-build [path/to/fleet.yaml]
+
+Reads fleet.yaml, builds a cols×rows tiled arrangement with one pane per
+agent per repo, and writes an .itermArrangement file ready to import.
+
+Each repo gets its own tab. Within each tab, panes are assigned to agent
+directories in row-major order:
+  agents 1,2,3   (top row)
+  agents 4,5,6   (bottom row)  — for a 3×2 layout
+"""
+import sys
+import os
+import re
+import plistlib
+import copy
+import uuid
+
+# ---------------------------------------------------------------------------
+# YAML parsing (no PyYAML dependency)
+# ---------------------------------------------------------------------------
+
+def parse_fleet_yaml(path):
+    text = open(path).read()
+
+    def get(key):
+        m = re.search(rf'^{key}:\s*(.+)$', text, re.MULTILINE)
+        return m.group(1).strip().strip('"').strip("'") if m else None
+
+    def get_nested(parent, child):
+        m = re.search(rf'^{parent}:\s*\n(?:.*\n)*?\s+{child}:\s*(.+)$', text, re.MULTILINE)
+        return m.group(1).strip() if m else None
+
+    base_dir = os.path.expanduser(get('base_dir') or '~/repos')
+    agent_count = int(get('agent_count') or 6)
+    cols = int(get('cols') or 3)
+    rows = int(get('rows') or 2)
+    width = float(get_nested('screen', 'width') or 1920)
+    height = float(get_nested('screen', 'height') or 1056)
+    profile = get_nested('iterm2', 'profile') or 'Default'
+    arr_path = os.path.expanduser(get_nested('iterm2', 'arrangement_path') or
+                                  '~/Library/Application Support/iTerm2/Arrangements/fleet.itermArrangement')
+
+    repos = []
+    in_repos = False
+    for line in text.splitlines():
+        if line.strip() == 'repos:':
+            in_repos = True
+            continue
+        if in_repos:
+            if line.startswith(' ') or line.startswith('\t'):
+                url = line.strip().lstrip('- ').strip()
+                if url:
+                    repos.append(url)
+            else:
+                break
+
+    repo_names = [os.path.basename(u.rstrip('/').removesuffix('.git')) for u in repos]
+
+    return {
+        'base_dir': base_dir,
+        'agent_count': agent_count,
+        'cols': cols,
+        'rows': rows,
+        'width': width,
+        'height': height,
+        'profile': profile,
+        'arr_path': arr_path,
+        'repos': repo_names,
+    }
+
+# ---------------------------------------------------------------------------
+# plist helpers
+# ---------------------------------------------------------------------------
+
+def new_guid():
+    return str(uuid.uuid4()).upper()
+
+def rgb(r, g, b):
+    return {'Red Component': float(r), 'Green Component': float(g), 'Blue Component': float(b),
+            'Alpha Component': 1.0, 'Color Space': 'sRGB'}
+
+# Distinct tab colors — cycles if more repos than colors
+TAB_PALETTE = [
+    rgb(0.75, 0.25, 0.25),  # red
+    rgb(0.25, 0.50, 0.80),  # blue
+    rgb(0.20, 0.65, 0.40),  # green
+    rgb(0.80, 0.60, 0.15),  # amber
+    rgb(0.85, 0.40, 0.10),  # orange
+    rgb(0.30, 0.65, 0.70),  # teal
+    rgb(0.55, 0.25, 0.75),  # purple
+    rgb(0.60, 0.60, 0.20),  # olive
+]
+
+def minimal_session_view(working_dir, profile, frame, badge=None, tab_name=None, tab_color=None):
+    """Build a SessionView plist dict from scratch (no seed arrangement needed)."""
+    guid = new_guid()
+    bm = {
+        'Working Directory': working_dir,
+        'Guid': new_guid(),
+        'Original Guid': new_guid(),
+        'Name': tab_name or profile,
+        'Columns': 220,
+        'Rows': 50,
+    }
+    if badge:
+        bm['Badge Text'] = badge
+    if tab_color:
+        bm['Tab Color'] = tab_color
+        bm['Use Tab Color'] = True
+
+    sv = {
+        'View Type': 'SessionView',
+        'frame': {k: float(v) for k, v in frame.items()},
+        'Is Active': 0,
+        'Session': {
+            'Session GUID': guid,
+            'Working Directory': working_dir,
+            'Last Directory': working_dir,
+            'Last Local Directory': working_dir,
+            'TTY': '',
+            'Commands': [],
+            'Directories': [],
+            'Hosts': [],
+            'Bookmark': bm,
+            'Variables': {
+                'path': working_dir,
+                'id': guid,
+                'termid': f'w0t0p0.{guid}',
+                **(({'autoName': tab_name, 'autoNameFormat': tab_name,
+                     'name': f'{tab_name} (-zsh)',
+                     'presentationName': f'{tab_name} (-zsh)',
+                     'profileName': tab_name}) if tab_name else {}),
+                **(({'badge': badge}) if badge else {}),
+            },
+        },
+    }
+    return sv
+
+def make_col_splitter(subviews, frame):
+    return {
+        'Splitter ID': new_guid(),
+        'Subviews': subviews,
+        'View Type': 'Splitter',
+        'frame': {k: float(v) for k, v in frame.items()},
+        'isVertical': False,
+    }
+
+def make_root_splitter(col_splitters, frame):
+    return {
+        'Splitter ID': new_guid(),
+        'Subviews': col_splitters,
+        'View Type': 'Splitter',
+        'frame': {k: float(v) for k, v in frame.items()},
+        'isVertical': True,
+    }
+
+def set_active_pane(root):
+    """Activate the top-left pane."""
+    try:
+        root['Subviews'][0]['Subviews'][0]['Is Active'] = 1
+    except (KeyError, IndexError, TypeError):
+        pass
+
+# ---------------------------------------------------------------------------
+# Tab builder
+# ---------------------------------------------------------------------------
+
+def build_tab(repo_name, cfg, color, agent_offset=0):
+    """
+    Build one tab for repo_name.
+    agent_offset: first agent number (always 1 here; kept for extensibility).
+    Panes assigned in row-major order across cols×rows.
+    """
+    W = cfg['width']
+    H = cfg['height']
+    cols = cfg['cols']
+    rows = cfg['rows']
+    col_w = W / cols
+
+    # Distribute height evenly; last row absorbs remainder
+    row_heights = []
+    remaining = H
+    for r in range(rows):
+        h = round(H / rows) if r < rows - 1 else remaining
+        row_heights.append(h)
+        remaining -= h + 1  # 1px divider
+
+    col_splitters = []
+    agent_num = agent_offset
+
+    for c in range(cols):
+        x = col_w * c
+        panes = []
+        y = 0.0
+        for r in range(rows):
+            agent_num += 1
+            working_dir = os.path.join(cfg['base_dir'], str(agent_num), repo_name)
+            h = row_heights[r]
+            sv = minimal_session_view(
+                working_dir=working_dir,
+                profile=cfg['profile'],
+                frame={'height': h, 'width': col_w, 'x': 0.0, 'y': y},
+                badge=f'{repo_name}-{agent_num}',
+                tab_name=repo_name,
+                tab_color=color,
+            )
+            panes.append(sv)
+            y += h + 1
+        col_splitters.append(make_col_splitter(
+            panes,
+            {'height': H, 'width': col_w, 'x': x, 'y': 0.0},
+        ))
+
+    root = make_root_splitter(col_splitters, {'height': H, 'width': W, 'x': 0.0, 'y': 0.0})
+    set_active_pane(root)
+    return {'Root': root, 'Tab GUID': new_guid()}
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+def main():
+    config_path = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser('~/.config/iterm-fleet/fleet.yaml')
+
+    if not os.path.exists(config_path):
+        print(f"ERROR: fleet.yaml not found at {config_path} — run fleet-init first", file=sys.stderr)
+        sys.exit(1)
+
+    cfg = parse_fleet_yaml(config_path)
+
+    print(f"Building arrangement: {len(cfg['repos'])} repos × {cfg['agent_count']} agents "
+          f"({cfg['cols']}×{cfg['rows']} layout)")
+
+    tabs = []
+    for i, repo_name in enumerate(cfg['repos']):
+        color = TAB_PALETTE[i % len(TAB_PALETTE)]
+        tab = build_tab(repo_name, cfg, color)
+        tabs.append(tab)
+        print(f"  + {repo_name}")
+
+    window = {
+        'Tabs': tabs,
+        'WindowType': 0,
+    }
+
+    out_path = cfg['arr_path']
+    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+
+    with open(out_path, 'wb') as f:
+        plistlib.dump([window], f, fmt=plistlib.FMT_XML)
+
+    print(f"\nWritten to {out_path}")
+    print("Run fleet-open to import into iTerm2.")
+
+if __name__ == '__main__':
+    main()

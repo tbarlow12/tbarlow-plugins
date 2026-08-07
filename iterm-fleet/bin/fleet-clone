@@ -1,0 +1,83 @@
+#!/usr/bin/env bash
+# Clone repos into {base_dir}/{1..N}/{repo-name}/ for each agent.
+# Usage: fleet-clone [path/to/fleet.yaml]
+set -euo pipefail
+
+CONFIG="${1:-$HOME/.config/iterm-fleet/fleet.yaml}"
+
+if [ ! -f "$CONFIG" ]; then
+  echo "ERROR: fleet.yaml not found at $CONFIG — run fleet-init first" >&2
+  exit 1
+fi
+
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "ERROR: python3 not found" >&2
+  exit 1
+fi
+
+# Parse fleet.yaml with python3 (avoid requiring yq)
+read -r BASE_DIR AGENT_COUNT < <(python3 - "$CONFIG" <<'EOF'
+import sys, re
+
+config = open(sys.argv[1]).read()
+
+def extract(key):
+    m = re.search(rf'^{key}:\s*(.+)$', config, re.MULTILINE)
+    return m.group(1).strip().strip('"').strip("'") if m else ''
+
+base = extract('base_dir').replace('~', __import__('os').path.expanduser('~'))
+count = extract('agent_count')
+print(base, count)
+EOF
+)
+
+REPOS=$(python3 - "$CONFIG" <<'EOF'
+import sys, re
+
+config = open(sys.argv[1]).read()
+in_repos = False
+repos = []
+for line in config.splitlines():
+    if line.strip() == 'repos:':
+        in_repos = True
+        continue
+    if in_repos:
+        if line.startswith(' ') or line.startswith('\t'):
+            url = line.strip().lstrip('- ').strip()
+            if url:
+                repos.append(url)
+        else:
+            break
+for r in repos:
+    print(r)
+EOF
+)
+
+if [ -z "$REPOS" ]; then
+  echo "ERROR: no repos found in $CONFIG" >&2
+  exit 1
+fi
+
+echo "Cloning into $BASE_DIR (agents 1–$AGENT_COUNT)..."
+echo ""
+
+while IFS= read -r url; do
+  [ -z "$url" ] && continue
+  repo_name=$(basename "$url" .git)
+
+  for i in $(seq 1 "$AGENT_COUNT"); do
+    dest="$BASE_DIR/$i/$repo_name"
+    if [ -d "$dest/.git" ]; then
+      echo "  [$i/$repo_name] exists — pulling"
+      git -C "$dest" pull --ff-only 2>&1 | tail -1
+    else
+      mkdir -p "$BASE_DIR/$i"
+      echo "  [$i/$repo_name] cloning..."
+      git clone "$url" "$dest"
+    fi
+  done
+  echo ""
+
+done <<< "$REPOS"
+
+echo "Done."
