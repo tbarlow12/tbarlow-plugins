@@ -1,0 +1,68 @@
+#!/usr/bin/env python3
+"""
+fleet-set-badge: Set the badge (watermark) color and/or size, then rebuild
+and reopen the arrangement.
+
+Usage: fleet-set-badge <color> [width-fraction] [height-fraction]
+
+<color> is a name (red, blue, green, amber, orange, teal, purple, olive,
+gray, cyan, pink, yellow, white) or 'r,g,b' floats between 0 and 1.
+
+width/height-fraction control how large the badge renders relative to each
+pane — this is a global iTerm2 preference (BadgeMaxWidthFraction /
+BadgeMaxHeightFraction), not a per-session setting, so it affects badges in
+all iTerm2 sessions, not just fleet panes. iTerm2's built-in defaults are
+roughly 0.5 / 0.3; omit either to leave it unchanged.
+"""
+import sys
+import os
+import subprocess
+
+import _fleet_yaml
+import _fleet_iterm
+from _fleet_colors import parse_color
+
+
+def main():
+    if len(sys.argv) < 2:
+        print("Usage: fleet-set-badge <color> [width-fraction] [height-fraction]", file=sys.stderr)
+        sys.exit(1)
+    color = sys.argv[1]
+    try:
+        parse_color(color)
+    except ValueError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    width_frac = sys.argv[2] if len(sys.argv) > 2 else None
+    height_frac = sys.argv[3] if len(sys.argv) > 3 else None
+
+    try:
+        cfg = _fleet_yaml.load()
+    except FileNotFoundError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    cfg['badge_color'] = color
+    if width_frac:
+        cfg['badge_width_fraction'] = width_frac
+    if height_frac:
+        cfg['badge_height_fraction'] = height_frac
+    _fleet_yaml.save(cfg)
+
+    if width_frac or height_frac:
+        _fleet_iterm.set_badge_fractions(
+            width_frac or cfg.get('badge_width_fraction') or 0.5,
+            height_frac or cfg.get('badge_height_fraction') or 0.3,
+        )
+        print(f"Set badge color to {color}, size fraction to "
+              f"{width_frac or '(unchanged)'} x {height_frac or '(unchanged)'}")
+    else:
+        print(f"Set badge color to {color}")
+
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    subprocess.run([os.path.join(script_dir, 'fleet-apply')], check=True)
+
+
+if __name__ == '__main__':
+    main()

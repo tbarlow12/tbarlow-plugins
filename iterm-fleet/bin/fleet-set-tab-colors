@@ -1,0 +1,46 @@
+#!/usr/bin/env python3
+"""
+fleet-set-tab-colors: Set the per-repo tab color palette, then rebuild and
+reopen the arrangement. Colors cycle if there are more repos than colors.
+
+Usage: fleet-set-tab-colors <color> [color ...]
+
+Each <color> is a name (red, blue, green, amber, orange, teal, purple,
+olive, gray, cyan, pink, yellow, white) or 'r,g,b' floats between 0 and 1.
+"""
+import sys
+import os
+import subprocess
+
+import _fleet_yaml
+from _fleet_colors import parse_color
+
+
+def main():
+    if len(sys.argv) < 2:
+        print("Usage: fleet-set-tab-colors <color> [color ...]", file=sys.stderr)
+        sys.exit(1)
+    colors = sys.argv[1:]
+    for c in colors:
+        try:
+            parse_color(c)
+        except ValueError as e:
+            print(f"ERROR: {e}", file=sys.stderr)
+            sys.exit(1)
+
+    try:
+        cfg = _fleet_yaml.load()
+    except FileNotFoundError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    cfg['tab_colors'] = colors
+    _fleet_yaml.save(cfg)
+    print(f"Set tab color palette to: {', '.join(colors)}")
+
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    subprocess.run([os.path.join(script_dir, 'fleet-apply')], check=True)
+
+
+if __name__ == '__main__':
+    main()

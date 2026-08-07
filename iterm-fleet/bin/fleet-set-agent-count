@@ -1,0 +1,48 @@
+#!/usr/bin/env python3
+"""
+fleet-set-agent-count: Change the number of agents. Does NOT rebuild/reopen
+automatically — new agents need `fleet-clone` to populate their directories
+first, and pane count is driven by layout (cols x rows), not agent_count,
+so you likely want `fleet-set-layout` too if you're growing past the
+current grid.
+
+Usage: fleet-set-agent-count <n>
+"""
+import sys
+
+import _fleet_yaml
+
+
+def main():
+    if len(sys.argv) < 2:
+        print("Usage: fleet-set-agent-count <n>", file=sys.stderr)
+        sys.exit(1)
+    try:
+        n = int(sys.argv[1])
+        if n < 1:
+            raise ValueError
+    except ValueError:
+        print(f"ERROR: '{sys.argv[1]}' isn't a positive integer", file=sys.stderr)
+        sys.exit(1)
+
+    try:
+        cfg = _fleet_yaml.load()
+    except FileNotFoundError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    old = cfg['agent_count']
+    cfg['agent_count'] = n
+    _fleet_yaml.save(cfg)
+    print(f"Set agent_count to {n} (was {old})")
+
+    panes = cfg['cols'] * cfg['rows']
+    if panes != n:
+        print(f"NOTE: current layout is {cfg['cols']}x{cfg['rows']} = {panes} panes per tab. "
+              f"Pane count comes from layout, not agent_count — run fleet-set-layout too if you "
+              f"want every agent to get a pane.")
+    print(f"Next: fleet-clone   # then fleet-apply")
+
+
+if __name__ == '__main__':
+    main()

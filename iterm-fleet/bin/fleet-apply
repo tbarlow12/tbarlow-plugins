@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# Rebuild the arrangement and reopen it in iTerm2 — the build+open pair you
+# run after every config tweak (font, colors, repos, layout, ...).
+# Usage: fleet-apply [path/to/fleet.yaml]
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+"$SCRIPT_DIR/fleet-build" "$@"
+echo ""
+"$SCRIPT_DIR/fleet-open" "$@"

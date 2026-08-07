@@ -1,0 +1,39 @@
+#!/usr/bin/env python3
+"""
+fleet-add-repo: Add a repo to fleet.yaml.
+
+Usage: fleet-add-repo <clone-url> [path/to/fleet.yaml]
+"""
+import sys
+import os
+
+import _fleet_yaml
+
+
+def main():
+    if len(sys.argv) < 2:
+        print("Usage: fleet-add-repo <clone-url> [path/to/fleet.yaml]", file=sys.stderr)
+        sys.exit(1)
+    url = sys.argv[1]
+    config_path = sys.argv[2] if len(sys.argv) > 2 else _fleet_yaml.DEFAULT_PATH
+
+    try:
+        cfg = _fleet_yaml.load(config_path)
+    except FileNotFoundError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    name = os.path.basename(url.rstrip('/').removesuffix('.git'))
+    existing_names = {os.path.basename(r.rstrip('/').removesuffix('.git')) for r in cfg['repos']}
+    if name in existing_names:
+        print(f"'{name}' is already in {config_path}")
+        sys.exit(0)
+
+    cfg['repos'].append(url)
+    _fleet_yaml.save(cfg)
+    print(f"Added {name} ({url})")
+    print(f"Next: fleet-clone {config_path}   # then fleet-apply")
+
+
+if __name__ == '__main__':
+    main()

@@ -1,0 +1,46 @@
+#!/usr/bin/env python3
+"""
+fleet-remove-repo: Remove a repo from fleet.yaml (config only — does not
+delete the cloned directories, since agents may have uncommitted work).
+
+Usage: fleet-remove-repo <name-or-url> [path/to/fleet.yaml]
+"""
+import sys
+import os
+
+import _fleet_yaml
+
+
+def repo_name(url):
+    return os.path.basename(url.rstrip('/').removesuffix('.git'))
+
+
+def main():
+    if len(sys.argv) < 2:
+        print("Usage: fleet-remove-repo <name-or-url> [path/to/fleet.yaml]", file=sys.stderr)
+        sys.exit(1)
+    target = sys.argv[1]
+    target_name = repo_name(target)
+    config_path = sys.argv[2] if len(sys.argv) > 2 else _fleet_yaml.DEFAULT_PATH
+
+    try:
+        cfg = _fleet_yaml.load(config_path)
+    except FileNotFoundError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    remaining = [r for r in cfg['repos'] if repo_name(r) != target_name]
+    if len(remaining) == len(cfg['repos']):
+        print(f"ERROR: no repo named '{target_name}' found in {config_path}", file=sys.stderr)
+        sys.exit(1)
+
+    cfg['repos'] = remaining
+    _fleet_yaml.save(cfg)
+    print(f"Removed {target_name} from {config_path}")
+    print("Note: cloned directories under base_dir were left in place. "
+          "Remove them manually if you don't need them.")
+    print("Next: fleet-apply")
+
+
+if __name__ == '__main__':
+    main()

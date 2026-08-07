@@ -14,63 +14,12 @@ directories in row-major order:
 """
 import sys
 import os
-import re
 import plistlib
-import copy
 import uuid
 
-# ---------------------------------------------------------------------------
-# YAML parsing (no PyYAML dependency)
-# ---------------------------------------------------------------------------
-
-def parse_fleet_yaml(path):
-    text = open(path).read()
-
-    def get(key):
-        m = re.search(rf'^{key}:\s*(.+)$', text, re.MULTILINE)
-        return m.group(1).strip().strip('"').strip("'") if m else None
-
-    def get_nested(parent, child):
-        m = re.search(rf'^{parent}:\s*\n(?:.*\n)*?\s+{child}:\s*(.+)$', text, re.MULTILINE)
-        return m.group(1).strip().strip('"').strip("'") if m else None
-
-    base_dir = os.path.expanduser(get('base_dir') or '~/repos')
-    agent_count = int(get('agent_count') or 6)
-    cols = int(get('cols') or 3)
-    rows = int(get('rows') or 2)
-    width = float(get_nested('screen', 'width') or 1920)
-    height = float(get_nested('screen', 'height') or 1056)
-    profile = get_nested('iterm2', 'profile') or 'Default'
-    arr_path = os.path.expanduser(get_nested('iterm2', 'arrangement_path') or
-                                  '~/Library/Application Support/iTerm2/Arrangements/fleet.iterm2arrangement')
-
-    repos = []
-    in_repos = False
-    for line in text.splitlines():
-        if line.strip() == 'repos:':
-            in_repos = True
-            continue
-        if in_repos:
-            if line.startswith(' ') or line.startswith('\t'):
-                url = line.strip().lstrip('- ').strip()
-                if url:
-                    repos.append(url)
-            else:
-                break
-
-    repo_names = [os.path.basename(u.rstrip('/').removesuffix('.git')) for u in repos]
-
-    return {
-        'base_dir': base_dir,
-        'agent_count': agent_count,
-        'cols': cols,
-        'rows': rows,
-        'width': width,
-        'height': height,
-        'profile': profile,
-        'arr_path': arr_path,
-        'repos': repo_names,
-    }
+import _fleet_yaml
+import _fleet_iterm
+from _fleet_colors import parse_color, rgb_dict, DEFAULT_TAB_PALETTE
 
 # ---------------------------------------------------------------------------
 # plist helpers
@@ -79,35 +28,35 @@ def parse_fleet_yaml(path):
 def new_guid():
     return str(uuid.uuid4()).upper()
 
-def rgb(r, g, b):
-    return {'Red Component': float(r), 'Green Component': float(g), 'Blue Component': float(b),
-            'Alpha Component': 1.0, 'Color Space': 'sRGB'}
+def minimal_session_view(working_dir, profile, frame, badge=None, tab_name=None, tab_color=None,
+                          normal_font='Menlo 13', point_size=13.0, badge_color=None):
+    """Build a SessionView plist dict from scratch (no seed arrangement needed).
 
-# Distinct tab colors — cycles if more repos than colors
-TAB_PALETTE = [
-    rgb(0.75, 0.25, 0.25),  # red
-    rgb(0.25, 0.50, 0.80),  # blue
-    rgb(0.20, 0.65, 0.40),  # green
-    rgb(0.80, 0.60, 0.15),  # amber
-    rgb(0.85, 0.40, 0.10),  # orange
-    rgb(0.30, 0.65, 0.70),  # teal
-    rgb(0.55, 0.25, 0.75),  # purple
-    rgb(0.60, 0.60, 0.20),  # olive
-]
-
-def minimal_session_view(working_dir, profile, frame, badge=None, tab_name=None, tab_color=None):
-    """Build a SessionView plist dict from scratch (no seed arrangement needed)."""
+    Guid is intentionally kept synthetic/unlinked (not the real profile's
+    Guid) — linking it makes iTerm treat the session as "launch this saved
+    profile fresh," which discards per-session overrides like Working
+    Directory and Tab Color. Only the font string is borrowed from the real
+    profile, as plain data.
+    """
     guid = new_guid()
+    # char cell size approximated from the real profile's font point size,
+    # so Columns/Rows render at a normal, readable size instead of the tiny
+    # fallback font iTerm uses for an unlinked bookmark with no font set.
+    char_w = point_size * 0.6
+    char_h = point_size * 1.25
     bm = {
         'Working Directory': working_dir,
         'Guid': new_guid(),
         'Original Guid': new_guid(),
         'Name': tab_name or profile,
-        'Columns': 220,
-        'Rows': 50,
+        'Normal Font': normal_font,
+        'Columns': max(20, int(frame['width'] / char_w)),
+        'Rows': max(6, int(frame['height'] / char_h)),
     }
     if badge:
         bm['Badge Text'] = badge
+        if badge_color:
+            bm['Badge Color'] = badge_color
     if tab_color:
         bm['Tab Color'] = tab_color
         bm['Use Tab Color'] = True
@@ -207,6 +156,9 @@ def build_tab(repo_name, cfg, color, agent_offset=0):
                 badge=f'{repo_name}-{agent_num}',
                 tab_name=repo_name,
                 tab_color=color,
+                normal_font=cfg['normal_font'],
+                point_size=cfg['point_size'],
+                badge_color=cfg['badge_color_rgb'],
             )
             panes.append(sv)
             y += h + 1
@@ -224,20 +176,33 @@ def build_tab(repo_name, cfg, color, agent_offset=0):
 # ---------------------------------------------------------------------------
 
 def main():
-    config_path = sys.argv[1] if len(sys.argv) > 1 else os.path.expanduser('~/.config/iterm-fleet/fleet.yaml')
+    config_path = sys.argv[1] if len(sys.argv) > 1 else _fleet_yaml.DEFAULT_PATH
 
-    if not os.path.exists(config_path):
-        print(f"ERROR: fleet.yaml not found at {config_path} — run fleet-init first", file=sys.stderr)
+    try:
+        cfg = _fleet_yaml.load(config_path)
+    except FileNotFoundError as e:
+        print(f"ERROR: {e}", file=sys.stderr)
         sys.exit(1)
 
-    cfg = parse_fleet_yaml(config_path)
+    _, font, size = _fleet_iterm.lookup_profile(cfg['profile'])
+    cfg['normal_font'] = font
+    cfg['point_size'] = size
 
-    print(f"Building arrangement: {len(cfg['repos'])} repos × {cfg['agent_count']} agents "
+    badge_spec = cfg.get('badge_color') or 'gray'
+    r, g, b = parse_color(badge_spec)
+    cfg['badge_color_rgb'] = rgb_dict(r, g, b, alpha=0.5)
+
+    palette_specs = cfg.get('tab_colors') or DEFAULT_TAB_PALETTE
+    tab_palette = [rgb_dict(*parse_color(spec)) for spec in palette_specs]
+
+    repo_names = [os.path.basename(u.rstrip('/').removesuffix('.git')) for u in cfg['repos']]
+
+    print(f"Building arrangement: {len(repo_names)} repos × {cfg['agent_count']} agents "
           f"({cfg['cols']}×{cfg['rows']} layout)")
 
     tabs = []
-    for i, repo_name in enumerate(cfg['repos']):
-        color = TAB_PALETTE[i % len(TAB_PALETTE)]
+    for i, repo_name in enumerate(repo_names):
+        color = tab_palette[i % len(tab_palette)]
         tab = build_tab(repo_name, cfg, color)
         tabs.append(tab)
         print(f"  + {repo_name}")
@@ -247,7 +212,7 @@ def main():
         'WindowType': 0,
     }
 
-    out_path = cfg['arr_path']
+    out_path = cfg['arrangement_path']
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
 
     with open(out_path, 'wb') as f:

@@ -12,6 +12,8 @@ fi
 
 mkdir -p "$(dirname "$OUTPUT")"
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 echo "=== iterm-fleet setup ==="
 echo ""
 
@@ -31,16 +33,30 @@ if ! [[ "$AGENT_COUNT" =~ ^[1-9][0-9]*$ ]]; then
   exit 1
 fi
 
-# Repos
-echo ""
-echo "Paste repo clone URLs (one per line, empty line to finish):"
+# Repos — try the gh-backed picker (checkbox via fzf if installed, else a
+# paginated numbered menu), falling back to manual URL paste if gh isn't
+# available/authenticated or nothing gets picked.
 REPOS=()
-while true; do
-  printf "  repo URL: "
-  read -r url
-  [ -z "$url" ] && break
-  REPOS+=("$url")
-done
+PICKER="$SCRIPT_DIR/_fleet_repo_picker.py"
+if [ -x "$PICKER" ] && command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+  echo ""
+  echo "Fetching repos you have access to via gh (most recently updated first)..."
+  while IFS= read -r url; do
+    [ -z "$url" ] && continue
+    REPOS+=("$url")
+  done < <("$PICKER" || true)
+fi
+
+if [ ${#REPOS[@]} -eq 0 ]; then
+  echo ""
+  echo "Paste repo clone URLs (one per line, empty line to finish):"
+  while true; do
+    printf "  repo URL: "
+    read -r url
+    [ -z "$url" ] && break
+    REPOS+=("$url")
+  done
+fi
 
 if [ ${#REPOS[@]} -eq 0 ]; then
   echo "ERROR: at least one repo is required" >&2
