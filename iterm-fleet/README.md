@@ -44,7 +44,7 @@ screen:
 iterm2:
   profile: Default
   arrangement_path: ~/Library/Application Support/iTerm2/Arrangements/fleet.iterm2arrangement
-  badge_color: gray            # optional — name or 'r,g,b'; default gray
+  badge_color: gray            # optional — name or 'r,g,b'; default gray; applied to both the iTerm2 profile's light- and dark-mode badge color, so it renders correctly regardless of the app's current appearance
   badge_width_fraction: 0.25   # optional — global iTerm2 badge size pref
   badge_height_fraction: 0.15  # optional
 tab_colors:                    # optional — cycles if fewer colors than repos
