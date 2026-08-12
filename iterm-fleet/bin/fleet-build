@@ -150,14 +150,13 @@ def build_tab(repo_name, cfg, color, agent_offset=0):
         remaining -= h + 1  # 1px divider
 
     col_splitters = []
-    agent_num = agent_offset
 
     for c in range(cols):
         x = col_w * c
         panes = []
         y = 0.0
         for r in range(rows):
-            agent_num += 1
+            agent_num = agent_offset + r * cols + c + 1
             working_dir = os.path.join(cfg['base_dir'], str(agent_num), repo_name)
             h = row_heights[r]
             sv = minimal_session_view(
@@ -202,14 +201,13 @@ def build_path_tab(path, tab_name, cfg, color):
         remaining -= h + 1
 
     col_splitters = []
-    pane_num = 0
 
     for c in range(cols):
         x = col_w * c
         panes = []
         y = 0.0
         for r in range(rows):
-            pane_num += 1
+            pane_num = r * cols + c + 1
             h = row_heights[r]
             sv = minimal_session_view(
                 working_dir=path,
