@@ -63,6 +63,7 @@ def load(path=None):
         'badge_height_fraction': _get_nested(text, 'iterm2', 'badge_height_fraction'),
         'tab_colors': _get_list(text, 'tab_colors'),
         'repos': _get_list(text, 'repos'),
+        'paths': _get_list(text, 'paths'),
     }
 
 
@@ -96,6 +97,10 @@ def save(cfg):
     lines.append('repos:')
     for r in cfg['repos']:
         lines.append(f'  - {r}')
+    if cfg.get('paths'):
+        lines.append('paths:')
+        for p in cfg['paths']:
+            lines.append(f'  - {p}')
     lines.append('')
 
     os.makedirs(os.path.dirname(path), exist_ok=True)

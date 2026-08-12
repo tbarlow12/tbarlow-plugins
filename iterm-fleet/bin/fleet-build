@@ -182,6 +182,57 @@ def build_tab(repo_name, cfg, color, agent_offset=0):
     set_active_pane(root)
     return {'Root': root, 'Tab GUID': new_guid()}
 
+
+def build_path_tab(path, tab_name, cfg, color):
+    """
+    Build one tab for a non-repo path. All panes open the same directory.
+    The path is shared across agents — no per-agent subdirectory.
+    """
+    W = cfg['width']
+    H = cfg['height']
+    cols = cfg['cols']
+    rows = cfg['rows']
+    col_w = W / cols
+
+    row_heights = []
+    remaining = H
+    for r in range(rows):
+        h = round(H / rows) if r < rows - 1 else remaining
+        row_heights.append(h)
+        remaining -= h + 1
+
+    col_splitters = []
+    pane_num = 0
+
+    for c in range(cols):
+        x = col_w * c
+        panes = []
+        y = 0.0
+        for r in range(rows):
+            pane_num += 1
+            h = row_heights[r]
+            sv = minimal_session_view(
+                working_dir=path,
+                profile=cfg['profile'],
+                frame={'height': h, 'width': col_w, 'x': 0.0, 'y': y},
+                badge=f'{tab_name}-{pane_num}',
+                tab_name=tab_name,
+                tab_color=color,
+                profile_dict=cfg['profile_dict'],
+                point_size=cfg['point_size'],
+                badge_color=cfg['badge_color_rgb'],
+            )
+            panes.append(sv)
+            y += h + 1
+        col_splitters.append(make_col_splitter(
+            panes,
+            {'height': H, 'width': col_w, 'x': x, 'y': 0.0},
+        ))
+
+    root = make_root_splitter(col_splitters, {'height': H, 'width': W, 'x': 0.0, 'y': 0.0})
+    set_active_pane(root)
+    return {'Root': root, 'Tab GUID': new_guid()}
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -208,8 +259,10 @@ def main():
     tab_palette = [rgb_dict(*parse_color(spec)) for spec in palette_specs]
 
     repo_names = [os.path.basename(u.rstrip('/').removesuffix('.git')) for u in cfg['repos']]
+    extra_paths = [(os.path.expanduser(p), os.path.basename(p.rstrip('/'))) for p in cfg.get('paths') or []]
 
-    print(f"Building arrangement: {len(repo_names)} repos × {cfg['agent_count']} agents "
+    total_tabs = len(repo_names) + len(extra_paths)
+    print(f"Building arrangement: {len(repo_names)} repos + {len(extra_paths)} paths × {cfg['agent_count']} agents "
           f"({cfg['cols']}×{cfg['rows']} layout)")
 
     tabs = []
@@ -218,6 +271,12 @@ def main():
         tab = build_tab(repo_name, cfg, color)
         tabs.append(tab)
         print(f"  + {repo_name}")
+
+    for j, (path, tab_name) in enumerate(extra_paths):
+        color = tab_palette[(len(repo_names) + j) % len(tab_palette)]
+        tab = build_path_tab(path, tab_name, cfg, color)
+        tabs.append(tab)
+        print(f"  + {tab_name} (path: {path})")
 
     window = {
         'Tabs': tabs,

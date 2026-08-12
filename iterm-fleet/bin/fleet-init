@@ -63,6 +63,24 @@ if [ ${#REPOS[@]} -eq 0 ]; then
   exit 1
 fi
 
+# Non-repo paths (optional)
+echo ""
+echo "Optional: add non-repo paths as tabs (e.g. ~/Documents/Notes)."
+echo "Each path gets its own tab — all panes open the same directory."
+echo "Paste paths one per line, empty line to skip/finish:"
+EXTRA_PATHS=()
+while true; do
+  printf "  path: "
+  read -r extra_path
+  [ -z "$extra_path" ] && break
+  expanded="${extra_path/#\~/$HOME}"
+  if [ ! -d "$expanded" ]; then
+    echo "  WARNING: '$expanded' is not an existing directory — skipping"
+    continue
+  fi
+  EXTRA_PATHS+=("$extra_path")
+done
+
 # Screen resolution
 DEFAULT_WIDTH=1920
 DEFAULT_HEIGHT=1056
@@ -123,6 +141,13 @@ YAML
 for url in "${REPOS[@]}"; do
   echo "  - $url" >> "$OUTPUT"
 done
+
+if [ ${#EXTRA_PATHS[@]} -gt 0 ]; then
+  echo "paths:" >> "$OUTPUT"
+  for p in "${EXTRA_PATHS[@]}"; do
+    echo "  - $p" >> "$OUTPUT"
+  done
+fi
 
 echo ""
 echo "Written to $OUTPUT"
