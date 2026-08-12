@@ -1,6 +1,6 @@
 {
   "name": "iterm-fleet",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Scaffold multi-agent iTerm2 workspaces. Clone repos into numbered agent directories and generate a tiled iTerm2 arrangement so each pane runs an independent agent instance.",
   "author": {
     "name": "Tanner Barlow"

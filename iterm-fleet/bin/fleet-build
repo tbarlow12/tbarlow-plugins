@@ -62,7 +62,12 @@ def minimal_session_view(working_dir, profile, frame, badge=None, tab_name=None,
     if badge:
         bm['Badge Text'] = badge
         if badge_color:
+            # iTerm2 prefers the light/dark-mode-specific variants over the
+            # plain key when the app is in dark mode, so all three must be
+            # set or the profile's inherited (Dark) variant wins.
             bm['Badge Color'] = badge_color
+            bm['Badge Color (Dark)'] = badge_color
+            bm['Badge Color (Light)'] = badge_color
     if tab_color:
         bm['Tab Color'] = tab_color
         bm['Use Tab Color'] = True
